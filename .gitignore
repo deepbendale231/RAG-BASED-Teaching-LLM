@@ -1,0 +1,34 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# Environment variables / API keys
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Large generated data
+audio/
+videos/
+audio_chunks/
+jsons/
+embeddings.joblib
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+
+# Logs
+*.log
+
+# Build files
+dist/
+build/
