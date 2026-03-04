@@ -1,15 +1,83 @@
-## How to use this RAG AI Teaching assistant for your own data
-## Step 1: Collect all your vides
- Move all your video files to videos folder
+# RAG AI Teaching Assistant
 
- ## Step 2: Convert to mp3
- convert all the files to mp3 by running video_to_mp3.py
+This project is a **Retrieval-Augmented Generation (RAG) based AI Teaching Assistant** that allows users to ask questions about video lecture content.
+The system processes videos, extracts transcripts, creates embeddings, and retrieves relevant information to generate answers using a local LLM.
 
- ## Step 3: Convert Mp3 to Json
- Convert all the mp3 files to json by running mp3_to_json.py
+---
 
- ## Step 4: Convert all the json files to vector
- Use the preprocess_json.py to convert to json files to a data frame with embeddings and save it as embeddings.joblib
+## Features
 
- ## Step 5: Prompt Generation and feeding to LLM: 
- Read the joblib file and load it into memory. Then Create a relevant prompt as per the user query and feed it to the LLM. 
+* Convert lecture videos into audio
+* Generate transcripts from audio
+* Create semantic embeddings from transcript chunks
+* Retrieve relevant lecture segments using similarity search
+* Generate answers using a local LLM (Ollama)
+* Simple web interface for asking questions
+
+---
+
+## Project Workflow
+Videos → Audio → JSON Transcripts → Embeddings → Retrieval → LLM Response
+
+## How to Run
+### 1. Add Videos
+Place your lecture videos inside the `videos` folder.
+
+### 2. Convert Videos to Audio
+Extract audio from videos:
+python video_to_mp3.py
+Audio files will be saved in the `audio` folder.
+
+### 3. Generate JSON Transcripts
+```
+python mp3_to_json.py
+```
+This converts audio files into transcript JSON files stored in `jsons/`.
+
+### 4. Generate Embeddings
+```
+python preprocess_json.py
+```
+This creates semantic embeddings and stores them in `embeddings.joblib`.
+
+### 5. Run the Application
+```
+python main.py
+```
+
+Open `index.html` to interact with the system.
+---
+
+## Tech Stack
+* Python
+* SentenceTransformers
+* Cosine Similarity Search
+* Ollama (Llama 3.2)
+* HTML / JavaScript
+* Joblib
+
+---
+
+## Project Structure
+
+```
+videos/              # Input lecture videos
+audio/               # Extracted audio files
+jsons/               # Transcript JSON files
+
+video_to_mp3.py      # Video → audio conversion
+mp3_to_json.py       # Audio → transcript JSON
+preprocess_json.py   # Generate embeddings
+process_incoming.py  # RAG query processing
+main.py              # Backend server
+index.html           # Frontend interface
+```
+
+---
+
+## Future Improvements
+
+* Deploy on AWS
+* Add vector database (FAISS / Pinecone)
+* Improve UI
+* Support more document formats
