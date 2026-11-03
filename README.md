@@ -1,83 +1,92 @@
-# RAG AI Teaching Assistant
+# RAG Teaching Assistant
 
-This project is a **Retrieval-Augmented Generation (RAG) based AI Teaching Assistant** that allows users to ask questions about video lecture content.
-The system processes videos, extracts transcripts, creates embeddings, and retrieves relevant information to generate answers using a local LLM.
+Ask a question about a video course and get an answer that tells you **which video to watch and at what timestamp**.
 
----
+The pipeline turns lecture videos into a searchable index of timestamped transcript chunks, retrieves the most relevant chunks for a question, and has a local LLM write a short answer that points back to them.
 
-## Features
+![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-API-009688?logo=fastapi&logoColor=white)
+![Ollama](https://img.shields.io/badge/Ollama-llama3.2-000000)
+![Sentence Transformers](https://img.shields.io/badge/Embeddings-all--MiniLM--L6--v2-6C63FF)
 
-* Convert lecture videos into audio
-* Generate transcripts from audio
-* Create semantic embeddings from transcript chunks
-* Retrieve relevant lecture segments using similarity search
-* Generate answers using a local LLM (Ollama)
-* Simple web interface for asking questions
+## How it works
 
----
-
-## Project Workflow
-Videos → Audio → JSON Transcripts → Embeddings → Retrieval → LLM Response
-
-## How to Run
-### 1. Add Videos
-Place your lecture videos inside the `videos` folder.
-
-### 2. Convert Videos to Audio
-Extract audio from videos:
-python video_to_mp3.py
-Audio files will be saved in the `audio` folder.
-
-### 3. Generate JSON Transcripts
-```
-python mp3_to_json.py
-```
-This converts audio files into transcript JSON files stored in `jsons/`.
-
-### 4. Generate Embeddings
-```
-python preprocess_json.py
-```
-This creates semantic embeddings and stores them in `embeddings.joblib`.
-
-### 5. Run the Application
-```
-python main.py
+```mermaid
+flowchart LR
+    subgraph Ingest ["Ingest (run once per course)"]
+        V[Videos .mp4] -->|ffmpeg: 16 kHz mono wav| A[Audio]
+        A -->|split into 2 min chunks| C[Chunks]
+        C -->|OpenAI transcription API| J[Timestamped JSON]
+        J -->|all-MiniLM-L6-v2, 384-dim| E[(embeddings.joblib)]
+    end
+    subgraph Query ["Query (per question)"]
+        Q[Question] -->|same embedding model| QE[Query vector]
+        QE -->|cosine similarity, top 5| R[Relevant chunks]
+        E --> R
+        R -->|prompt with video, time range, text| L[Ollama llama3.2]
+        L --> ANS[Answer + sources]
+    end
 ```
 
-Open `index.html` to interact with the system.
----
+| Stage | File | What it does |
+|---|---|---|
+| 1 | `video_to_mp3.py` | Extracts 16 kHz mono `.wav` audio from every `.mp4` in `videos/` with ffmpeg |
+| 2 | `mp3_to_json.py` | Splits each audio file into 2-minute chunks, transcribes each with retries, saves `jsons/<video>.json` with start and end times |
+| 3 | `preprocess_json.py` | Embeds every chunk and writes `embeddings.joblib` |
+| 4 | `process_incoming.py` | Embeds the question, finds the 5 closest chunks, builds the prompt and calls the local LLM |
+| 5 | `main.py` + `index.html` | FastAPI `POST /ask` endpoint and a small chat page |
 
-## Tech Stack
-* Python
-* SentenceTransformers
-* Cosine Similarity Search
-* Ollama (Llama 3.2)
-* HTML / JavaScript
-* Joblib
+The index in this repo covers **11 beginner Python tutorial videos, split into 105 two-minute chunks**.
 
----
+## What runs where
 
-## Project Structure
+| Step | Runs | Needs |
+|---|---|---|
+| Transcription | OpenAI API (`gpt-4o-mini-transcribe`) | `OPENAI_API_KEY` |
+| Embeddings | Local | `sentence-transformers` |
+| Answer generation | Local, via Ollama | `ollama pull llama3.2` |
 
+Transcription is the only step that calls a hosted API, and it is only needed to ingest new videos. Asking questions against the included index is fully local.
+
+## Run it
+
+```bash
+pip install -r requirements.txt
+ollama pull llama3.2
+uvicorn main:app --port 8000
 ```
-videos/              # Input lecture videos
-audio/               # Extracted audio files
-jsons/               # Transcript JSON files
 
-video_to_mp3.py      # Video → audio conversion
-mp3_to_json.py       # Audio → transcript JSON
-preprocess_json.py   # Generate embeddings
-process_incoming.py  # RAG query processing
-main.py              # Backend server
-index.html           # Frontend interface
+Open `index.html` in a browser and ask a question, or call the API directly:
+
+```bash
+curl -s localhost:8000/ask -H 'content-type: application/json' \
+  -d '{"question": "What is a variable in Python and how do I use it?"}'
 ```
 
----
+The response has `question`, `answer` and `sources` (video title, number, start and end seconds, transcript text).
 
-## Future Improvements
+### Index your own videos
 
-* Deploy on AWS
-* Add vector database (FAISS / Pinecone)
-* Improve UI
-* Support more document formats
+```bash
+export OPENAI_API_KEY=...
+python video_to_mp3.py      # videos/*.mp4  ->  audio/*.wav
+python mp3_to_json.py       # audio/*.wav   ->  jsons/*.json
+python preprocess_json.py   # jsons/*.json  ->  embeddings.joblib
+```
+
+Name videos like `01_Title.mp4`; the numeric prefix is used as the video number in answers.
+
+## Design choices
+
+- **Fixed 2-minute chunks.** The transcription API returns text per file, so chunk boundaries (and therefore timestamps) come from the audio split, not from sentences. This gives reliable "watch minute 4 to 6" pointers at the cost of sometimes cutting an explanation in half.
+- **Small local embedding model.** `all-MiniLM-L6-v2` is fast on CPU and good enough for short English lecture text.
+- **Plain cosine similarity over a NumPy matrix.** With about 100 chunks a vector database adds complexity and no speed. It would be the first thing to change at thousands of chunks.
+- **A scoped prompt.** The LLM is told to name the video and approximate timestamps, and to decline questions that are not about the course.
+
+## Limitations and next steps
+
+- **No retrieval evaluation yet.** There is no labelled question set, so retrieval quality is unmeasured. The next step is 30 to 50 questions with the correct video for each, and a hit rate at 1 and 5 compared against a keyword (BM25) baseline.
+- **Timestamps are chunk-level.** Answers point to a two-minute window, not an exact moment. Word-level timestamps would fix this.
+- **One language, one course.** Nothing is tuned for multilingual audio or mixed content.
+- **Demo-grade serving.** CORS is open (`*`) and the page calls `127.0.0.1:8000` directly. Lock both down before exposing it.
+- **Hosted demo.** Not deployed, because generation depends on a local Ollama model.

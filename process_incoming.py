@@ -55,7 +55,9 @@ def answer_question(incoming_query: str):
     ).flatten()
 
     top_indices = similarities.argsort()[::-1][:TOP_RESULTS]
-    new_df = df.loc[top_indices]
+    new_df = df.loc[top_indices].copy()
+    # video number comes from the "01_Title" filename prefix (the stored column is empty)
+    new_df["number"] = new_df["title"].str.split("_").str[0]
 
     # Build context JSON
     context_json = new_df[
