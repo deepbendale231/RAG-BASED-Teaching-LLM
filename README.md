@@ -53,21 +53,14 @@ sequenceDiagram
 
 ## How it works
 
+**Ingest (run once per course):** videos become timestamped, embedded transcript chunks. The query side is the sequence diagram above.
+
 ```mermaid
 flowchart LR
-    subgraph Ingest ["Ingest (run once per course)"]
-        V[Videos .mp4] -->|ffmpeg: 16 kHz mono wav| A[Audio]
-        A -->|split into 2 min chunks| C[Chunks]
-        C -->|OpenAI transcription API| J[Timestamped JSON]
-        J -->|all-MiniLM-L6-v2, 384-dim| E[(embeddings.joblib)]
-    end
-    subgraph Query ["Query (per question)"]
-        Q[Question] -->|same embedding model| QE[Query vector]
-        QE -->|cosine similarity, top 5| R[Relevant chunks]
-        E --> R
-        R -->|prompt with video, time range, text| L[Ollama llama3.2]
-        L --> ANS[Answer + sources]
-    end
+    V[Videos .mp4] -->|ffmpeg, 16 kHz mono| A[Audio .wav]
+    A -->|2 min chunks| C[Chunks]
+    C -->|OpenAI transcription| J[Timestamped JSON]
+    J -->|MiniLM, 384-dim| E[(embeddings.joblib)]
 ```
 
 | Stage | File | What it does |
