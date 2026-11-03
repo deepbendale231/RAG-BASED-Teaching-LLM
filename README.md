@@ -1,13 +1,55 @@
+<div align="center">
+
 # RAG Teaching Assistant
 
-Ask a question about a video course and get an answer that tells you **which video to watch and at what timestamp**.
-
-The pipeline turns lecture videos into a searchable index of timestamped transcript chunks, retrieves the most relevant chunks for a question, and has a local LLM write a short answer that points back to them.
+**Ask a question about a video course. Get the answer, the video, and the timestamp to watch.**
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-API-009688?logo=fastapi&logoColor=white)
 ![Ollama](https://img.shields.io/badge/Ollama-llama3.2-000000)
 ![Sentence Transformers](https://img.shields.io/badge/Embeddings-all--MiniLM--L6--v2-6C63FF)
+
+[**How it works**](#how-it-works) · [**Example**](#example) · [**Run it**](#run-it) · [**Limitations**](#limitations-and-next-steps)
+
+| Videos indexed | Transcript chunks | Embedding size | Retrieval | Answers by |
+|:---:|:---:|:---:|:---:|:---:|
+| **11** | **105** | **384-dim** | **cosine, top 5** | **local llama3.2** |
+
+</div>
+
+The pipeline turns lecture videos into a searchable index of timestamped transcript chunks, retrieves the most relevant chunks for a question, and has a local LLM write a short answer that points back to them.
+
+## Example
+
+**Question:** "What is a variable in Python and how do I use it?"
+
+Each answer comes back with its sources, so you can jump straight to the right part of the right video:
+
+```json
+{
+  "question": "What is a variable in Python and how do I use it?",
+  "answer": "<short answer naming the video and approximate timestamps>",
+  "sources": [
+    { "title": "<video title>", "number": "<video number>", "start": 120.0, "end": 240.0, "text": "<transcript chunk>" }
+  ]
+}
+```
+
+_Shape of the response; the values are placeholders and the answer text varies with the model._
+
+```mermaid
+sequenceDiagram
+    actor U as You
+    participant API as FastAPI /ask
+    participant IDX as Embedding index
+    participant LLM as Ollama llama3.2
+    U->>API: question
+    API->>IDX: embed question, cosine search
+    IDX-->>API: top 5 chunks (video, start-end, text)
+    API->>LLM: prompt with the 5 chunks
+    LLM-->>API: friendly answer naming video and time
+    API-->>U: answer + sources
+```
 
 ## How it works
 
@@ -65,7 +107,8 @@ curl -s localhost:8000/ask -H 'content-type: application/json' \
 
 The response has `question`, `answer` and `sources` (video title, number, start and end seconds, transcript text).
 
-### Index your own videos
+<details>
+<summary><b>Index your own videos</b></summary>
 
 ```bash
 export OPENAI_API_KEY=...
@@ -76,12 +119,17 @@ python preprocess_json.py   # jsons/*.json  ->  embeddings.joblib
 
 Name videos like `01_Title.mp4`; the numeric prefix is used as the video number in answers.
 
-## Design choices
+</details>
+
+<details>
+<summary><b>Design choices</b></summary>
 
 - **Fixed 2-minute chunks.** The transcription API returns text per file, so chunk boundaries (and therefore timestamps) come from the audio split, not from sentences. This gives reliable "watch minute 4 to 6" pointers at the cost of sometimes cutting an explanation in half.
 - **Small local embedding model.** `all-MiniLM-L6-v2` is fast on CPU and good enough for short English lecture text.
 - **Plain cosine similarity over a NumPy matrix.** With about 100 chunks a vector database adds complexity and no speed. It would be the first thing to change at thousands of chunks.
 - **A scoped prompt.** The LLM is told to name the video and approximate timestamps, and to decline questions that are not about the course.
+
+</details>
 
 ## Limitations and next steps
 
